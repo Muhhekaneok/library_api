@@ -1,6 +1,9 @@
 from fastapi import FastAPI
+import psycopg2
+from app.db_config import db_config
 
 app = FastAPI()
+
 
 @app.get("/")
 def read_root():
@@ -9,9 +12,17 @@ def read_root():
 
 @app.get("/books")
 def get_books():
-    return [
-        {"id": 1, "title": "Three men in a boat", "author": "Gerome K. Jerome"},
-        {"id": 2, "title": "Spin Dictators", "author": "Sergey Guriev"},
-        {"id": 3, "title": "Изучаем Python", "author": "Eric Matthes"},
-        {"id": 4, "title": "Статистика и котики", "author": "Владимир Савельев"}
+    connection = psycopg2.connect(**db_config)
+    cursor = connection.cursor()
+    cursor.execute("SELECT id, title, author FROM books")
+    rows = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return [{
+        "id": r[0],
+        "title": r[1],
+        "author": r[2]}
+        for r in rows
     ]
