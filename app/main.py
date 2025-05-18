@@ -1,7 +1,8 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import psycopg2
 from app.db_config import db_config
+from app.auth import hash_password, verify_password, UserCreate
 
 app = FastAPI()
 
@@ -98,4 +99,32 @@ def delete_book(book_id: int):
 
     return {
         "message": f"Book with id = {book_id} was deleted"
+    }
+
+
+@app.post("/register")
+def register(user: UserCreate):
+    connection = psycopg2.connect(**db_config)
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "SELECT * FROM users WHERE email = %s",
+        (user.email,)
+    )
+    if cursor.fetchone():
+        cursor.close()
+        connection.close()
+        raise HTTPException(status_code=400, detail="Email already registered")
+
+    hashed_password = hash_password(user.password)
+    cursor.execute(
+        "INSERT INTO users (email, hashed_password) VALUES (%s, %s)",
+        (user.email, hashed_password)
+    )
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+    return {
+        "message": "User registered"
     }
