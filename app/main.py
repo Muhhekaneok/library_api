@@ -154,5 +154,5 @@ def login(user: UserLogin):
     token = create_access_token(data={"sub": email})
 
     return {
-        "token": token, "type": "owner"
+        "access_token": token, "token_type": "bearer"
     }
