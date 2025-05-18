@@ -77,3 +77,25 @@ def update_book(book_id: int, book: Book):
         "title": book.title,
         "author": book.author
     }
+
+
+@app.delete("/books/{book_id")
+def delete_book(book_id: int):
+    connection = psycopg2.connect(**db_config)
+    cursor = connection.cursor()
+    cursor.execute(
+        "DELETE FROM books WHERE id = %s",
+        (book_id,)
+    )
+
+    connection.commit()
+    deleted_rows = cursor.rowcount
+    cursor.close()
+    connection.close()
+
+    if deleted_rows == 0:
+        return {"Error": f"Book with id = {book_id} not found"}
+
+    return {
+        "message": f"Book with id = {book_id} was deleted"
+    }
