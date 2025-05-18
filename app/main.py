@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import psycopg2
 from app.db_config import db_config
-from app.auth import hash_password, verify_password, UserCreate
+from app.auth import hash_password, verify_password, UserCreate, create_access_token, UserLogin
 
 app = FastAPI()
 
@@ -127,4 +127,32 @@ def register(user: UserCreate):
 
     return {
         "message": "User registered"
+    }
+
+
+@app.post("/login")
+def login(user: UserLogin):
+    connection = psycopg2.connect(**db_config)
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "SELECT * FROM users WHERE email = %s",
+        (user.email,)
+    )
+    db_user = cursor.fetchone()
+    cursor.close()
+    connection.close()
+
+    if not db_user:
+        raise HTTPException(status_code=400, detail="Invalid email or password")
+
+    user_id, email, hashed_password = db_user
+
+    if not verify_password(user.password, hashed_password):
+        raise HTTPException(status_code=400, detail="Invalid email or password")
+
+    token = create_access_token(data={"sub": email})
+
+    return {
+        "token": token, "type": "owner"
     }
