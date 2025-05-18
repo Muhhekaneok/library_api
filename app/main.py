@@ -39,8 +39,8 @@ def add_book(book: Book):
     connection = psycopg2.connect(**db_config)
     cursor = connection.cursor()
     cursor.execute(
-        f"INSERT INTO books (title, author) VALUES"
-        f"{book.title, book.author} RETURNING id"
+        "INSERT INTO books (title, author) VALUES (%s, %s) RETURNING id",
+        (book.title, book.author)
     )
     new_id = cursor.fetchone()[0]
 
@@ -53,3 +53,27 @@ def add_book(book: Book):
         "title": book.title,
         "author": book.author
     }]
+
+
+@app.put("/books/{book_id}")
+def update_book(book_id: int, book: Book):
+    connection = psycopg2.connect(**db_config)
+    cursor = connection.cursor()
+    cursor.execute(
+        "UPDATE books SET title = %s, author = %s WHERE id = %s",
+        (book.title, book.author, book_id)
+    )
+
+    connection.commit()
+    updated_rows = cursor.rowcount
+    cursor.close()
+    connection.close()
+
+    if updated_rows == 0:
+        return {"Error": f"Book with id = {book_id} not found"}
+
+    return {
+        "id": book_id,
+        "title": book.title,
+        "author": book.author
+    }
