@@ -3,6 +3,7 @@ from pydantic import BaseModel
 import psycopg2
 from app.db_config import db_config
 from app.auth import hash_password, verify_password, UserCreate, create_access_token, UserLogin, get_current_user
+from datetime import datetime
 
 app = FastAPI(
     swagger_ui_init_oauth={
@@ -159,4 +160,67 @@ def login(user: UserLogin):
 
     return {
         "access_token": access_token, "token_type": "bearer"
+    }
+
+
+class BorrowedRequest(BaseModel):
+    book_id: int
+    reader_id: int
+
+
+@app.post("/borrow")
+def borrow_book(request: BorrowedRequest, current_user: str = Depends(get_current_user)):
+    connection = psycopg2.connect(**db_config)
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "SELECT quantity FROM books WHERE id = %s",
+        (request.book_id,)
+    )
+    result = cursor.fetchone()
+
+    if not result:
+        cursor.close()
+        connection.close()
+        raise HTTPException(status_code=401, detail="Book not found")
+
+    quantity = result[0]
+    if quantity <= 0:
+        cursor.close()
+        connection.close()
+        raise HTTPException(status_code=400, detail="No available copies of this book")
+
+    cursor.execute(
+        """
+        SELECT COUNT(*) FROM borrowed_books
+        WHERE reader_id = %s AND returned_date IS NULL
+        """,
+        (request.reader_id,)
+    )
+
+    books_borrowed = cursor.fetchone()[0]
+    if books_borrowed >= 3:
+        cursor.close()
+        connection.close()
+        raise HTTPException(status_code=400, detail="3 books has already borrowed")
+
+    cursor.execute(
+        """
+        INSERT INTO borrowed_books (book_id, reader_id, borrowed_date)
+        VALUES (%s, %s, %s)
+        """,
+        (request.book_id, request.reader_id, datetime.now())
+    )
+
+    cursor.execute(
+        "UPDATE books SET quantity = quantity - 1 WHERE id = %s",
+        (request.book_id,)
+    )
+
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+    return {
+        "message": "Book borrowed"
     }
