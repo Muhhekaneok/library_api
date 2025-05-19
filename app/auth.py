@@ -1,7 +1,11 @@
 from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
-from jose import jwt
+from jose import jwt, JWTError
 from pydantic import BaseModel, EmailStr
+from fastapi import Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer
+
+get_token = OAuth2PasswordBearer(tokenUrl="/login")
 
 password_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -36,3 +40,15 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
     return encoded_jwt
+
+
+def get_current_user(token: str = Depends(get_token)) -> str:
+    try:
+        decoded_data = jwt.decode(token=token, key=SECRET_KEY, algorithms=[ALGORITHM])
+        email = decoded_data.get("sub")
+        if not email:
+            raise HTTPException(status_code=401, detail="Invalid token")
+        return email
+
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")

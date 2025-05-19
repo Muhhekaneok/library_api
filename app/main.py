@@ -1,10 +1,14 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Security
 from pydantic import BaseModel
 import psycopg2
 from app.db_config import db_config
-from app.auth import hash_password, verify_password, UserCreate, create_access_token, UserLogin
+from app.auth import hash_password, verify_password, UserCreate, create_access_token, UserLogin, get_current_user
 
-app = FastAPI()
+app = FastAPI(
+    swagger_ui_init_oauth={
+        "usePkceWithAuthorizationCodeGrant": False
+    }
+)
 
 
 class Book(BaseModel):
@@ -36,7 +40,7 @@ def get_books():
 
 
 @app.post("/books")
-def add_book(book: Book):
+def add_book(book: Book, current_user: str = Depends(get_current_user)):
     connection = psycopg2.connect(**db_config)
     cursor = connection.cursor()
     cursor.execute(
@@ -151,8 +155,8 @@ def login(user: UserLogin):
     if not verify_password(user.password, hashed_password):
         raise HTTPException(status_code=400, detail="Invalid email or password")
 
-    token = create_access_token(data={"sub": email})
+    access_token = create_access_token(data={"sub": email})
 
     return {
-        "access_token": token, "token_type": "bearer"
+        "access_token": access_token, "token_type": "bearer"
     }

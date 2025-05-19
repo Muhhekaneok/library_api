@@ -40,8 +40,8 @@ RESTful API для управления библиотекой.
 * Используется ключ SECRET_KEY
 * Токен возвращается в формате:
 {
-  "token": "<token>",
-  "type": "owner"
+  "access_token": "<token>",
+  "token_type": "bearer"
 }
 
 ## Принятые решения
