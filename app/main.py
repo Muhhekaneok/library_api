@@ -278,3 +278,34 @@ def return_book(request: ReturnRequest,
     return {
         "message": "Book returned"
     }
+
+
+@app.get("/borrowed/{reader_id}")
+def get_borrowed_books(reader_id: int, current_user: str = Depends(get_current_user)):
+    connection = psycopg2.connect(**db_config)
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            b.id,
+            b.title,
+            b.author
+        FROM books AS b
+        JOIN borrowed_books AS bb
+        ON b.id = bb.book_id
+        WHERE bb.reader_id = %s AND bb.returned_date IS NULL
+        """,
+        (reader_id,)
+    )
+
+    book_rows = cursor.fetchall()
+    cursor.close()
+    connection.close()
+
+    return [{
+        "id": br[0],
+        "title": br[1],
+        "author": br[2]}
+        for br in book_rows
+    ]
