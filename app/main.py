@@ -329,6 +329,7 @@ def get_users(current_user: str = Depends(get_current_user)):
         for ur in user_rows
     ]
 
+
 @app.get("/readers")
 def get_readers(current_user: str = Depends(get_current_user)):
     connection = psycopg2.connect(**db_config)
@@ -379,3 +380,35 @@ def get_reader(reader_id: int, current_user: str = Depends(get_current_user)):
         "name": row[1],
         "email": row[2]
     }
+
+
+@app.get("/borrowed")
+def get_all_borrowed_books(current_user: str = Depends(get_current_user)):
+    connection = psycopg2.connect(**db_config)
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            b.id,
+            b.title,
+            r.name,
+            bb.borrowed_date
+        FROM books AS b
+        JOIN borrowed_books AS bb ON b.id = bb.book_id
+        JOIN readers AS r ON r.id = bb.reader_id
+        WHERE bb.returned_date IS NULL
+        """
+    )
+
+    borrowed_rows = cursor.fetchall()
+    cursor.close()
+    connection.close()
+
+    return [{
+        "book_id": br[0],
+        "title": br[1],
+        "reader_name": br[2],
+        "borrowed_date": br[3]}
+        for br in borrowed_rows
+    ]
