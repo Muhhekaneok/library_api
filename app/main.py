@@ -309,3 +309,21 @@ def get_borrowed_books(reader_id: int, current_user: str = Depends(get_current_u
         "author": br[2]}
         for br in book_rows
     ]
+
+
+@app.get("/users")
+def get_users(current_user: str = Depends(get_current_user)):
+    connection = psycopg2.connect(**db_config)
+    cursor = connection.cursor()
+
+    cursor.execute("SELECT * FROM users")
+    user_rows = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return [{
+        "id": ur[0],
+        "email": ur[1]}
+        for ur in user_rows
+    ]
