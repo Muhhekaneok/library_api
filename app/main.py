@@ -1,5 +1,4 @@
 from fastapi import FastAPI, HTTPException, Depends, Security
-from psycopg2 import connect
 from pydantic import BaseModel
 import psycopg2
 from app.db_config import db_config
@@ -16,6 +15,7 @@ app = FastAPI(
 class Book(BaseModel):
     title: str
     author: str
+    quantity: int
 
 
 class ReturnRequest(BaseModel):
@@ -32,7 +32,7 @@ def read_root():
 def get_books():
     connection = psycopg2.connect(**db_config)
     cursor = connection.cursor()
-    cursor.execute("SELECT id, title, author FROM books")
+    cursor.execute("SELECT id, title, author, quantity FROM books")
     rows = cursor.fetchall()
 
     cursor.close()
@@ -41,7 +41,8 @@ def get_books():
     return [{
         "id": r[0],
         "title": r[1],
-        "author": r[2]}
+        "author": r[2],
+        "quantity": r[3]}
         for r in rows
     ]
 
@@ -51,8 +52,8 @@ def add_book(book: Book, current_user: str = Depends(get_current_user)):
     connection = psycopg2.connect(**db_config)
     cursor = connection.cursor()
     cursor.execute(
-        "INSERT INTO books (title, author) VALUES (%s, %s) RETURNING id",
-        (book.title, book.author)
+        "INSERT INTO books (title, author, quantity) VALUES (%s, %s, %s) RETURNING id",
+        (book.title, book.author, book.quantity)
     )
     new_id = cursor.fetchone()[0]
 
@@ -63,7 +64,8 @@ def add_book(book: Book, current_user: str = Depends(get_current_user)):
     return [{
         "id": new_id,
         "title": book.title,
-        "author": book.author
+        "author": book.author,
+        "quantity": book.quantity
     }]
 
 
