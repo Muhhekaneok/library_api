@@ -334,7 +334,7 @@ def get_readers(current_user: str = Depends(get_current_user)):
     connection = psycopg2.connect(**db_config)
     cursor = connection.cursor()
 
-    cursor.execute("SELECT * FROM readers")
+    cursor.execute("SELECT id, name, email FROM readers")
     readers_rows = cursor.fetchall()
 
     cursor.close()
@@ -346,3 +346,36 @@ def get_readers(current_user: str = Depends(get_current_user)):
         "email": rr[2]}
         for rr in readers_rows
     ]
+
+
+@app.get("/readers/{reader_id}")
+def get_reader(reader_id: int, current_user: str = Depends(get_current_user)):
+    connection = psycopg2.connect(**db_config)
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            id,
+            name,
+            email
+        FROM readers
+        WHERE id = %s
+        """,
+        (reader_id,)
+    )
+
+    row = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    if row is None:
+        raise HTTPException(status_code=404,
+                            detail="Reader with such id was not found")
+
+    return {
+        "id": row[0],
+        "name": row[1],
+        "email": row[2]
+    }
