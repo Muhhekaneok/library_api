@@ -17,6 +17,11 @@ class Book(BaseModel):
     author: str
 
 
+class ReturnRequest(BaseModel):
+    book_id: str
+    reader_id: str
+
+
 @app.get("/")
 def read_root():
     return {"message": "Library API is running"}
@@ -223,4 +228,53 @@ def borrow_book(request: BorrowedRequest, current_user: str = Depends(get_curren
 
     return {
         "message": "Book borrowed"
+    }
+
+
+@app.post("/return")
+def return_book(request: ReturnRequest,
+                current_user: str = Depends(get_current_user)):
+    connection = psycopg2.connect(**db_config)
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        SELECT * FROM borrowed_books
+        WHERE book_id = %s AND reader_id = %s AND returned_date IS NULL
+        """,
+        (request.book_id, request.reader_id)
+    )
+
+    borrow = cursor.fetchone()
+    if not borrow:
+        cursor.close()
+        connection.close()
+        raise HTTPException(status_code=400,
+                            detail="Book isn't borrowed by this reader")
+
+    borrow_id = borrow[0]
+    cursor.execute(
+        """
+        UPDATE borrowed_books
+        SET returned_date = %s
+        WHERE id = %s
+        """,
+        (datetime.now(), borrow_id)
+    )
+
+    cursor.execute(
+        """
+        UPDATE books
+        SET quantity = quantity + 1
+        WHERE id = %s
+        """,
+        (request.book_id,)
+    )
+
+    connection.commit()
+    cursor.close()
+    connection.close()
+
+    return {
+        "message": "Book returned"
     }
