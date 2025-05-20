@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException, Depends, Security
+from psycopg2 import connect
 from pydantic import BaseModel
 import psycopg2
 from app.db_config import db_config
@@ -326,4 +327,22 @@ def get_users(current_user: str = Depends(get_current_user)):
         "id": ur[0],
         "email": ur[1]}
         for ur in user_rows
+    ]
+
+@app.get("/readers")
+def get_readers(current_user: str = Depends(get_current_user)):
+    connection = psycopg2.connect(**db_config)
+    cursor = connection.cursor()
+
+    cursor.execute("SELECT * FROM readers")
+    readers_rows = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return [{
+        "id": rr[0],
+        "name": rr[1],
+        "email": rr[2]}
+        for rr in readers_rows
     ]
