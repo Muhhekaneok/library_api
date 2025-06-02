@@ -2,299 +2,124 @@ from fastapi import HTTPException
 from datetime import datetime
 
 from app.data_base import get_db_connection
-from app.models import Book, BorrowedBookRequest, ReturnBookRequest
+from app.database_by_alchemy import SessionLocal
+from app.models import (Book, BorrowedBookRequest, ReturnBookRequest, BookAlc,
+                        BorrowedBookAlc, BookAlcCreate, BookAlcResponse)
 
 
 def get_book():
-    connection = get_db_connection()
-    cursor = connection.cursor()
-    cursor.execute(
-        """
-        SELECT
-            id,
-            title,
-            author,
-            quantity
-        FROM books
-        """
-    )
-
-    books_rows = cursor.fetchall()
-    cursor.close()
-    connection.close()
-
-    return [{
-        "id": br[0],
-        "title": br[1],
-        "author": br[2],
-        "quantity": br[3]}
-        for br in books_rows
-    ]
+    db = SessionLocal()
+    db_books = db.query(BookAlc).all()
+    db.close()
+    return db_books
 
 
-def add_book(book: Book):
-    connection = get_db_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO books (title, author, quantity)
-        VALUES (%s, %s, %s) RETURNING id
-        """,
-        (book.title, book.author, book.quantity)
-    )
-
-    new_id = cursor.fetchone()[0]
-    connection.commit()
-    cursor.close()
-    connection.close()
-
-    return {
-        "id": new_id,
-        "title": book.title,
-        "author": book.author,
-        "quantity": book.quantity
-    }
+def add_book(book: BookAlcCreate):
+    db = SessionLocal()
+    db_book = BookAlc(title=book.title, author=book.author, quantity=book.quantity)
+    db.add(db_book)
+    db.commit()
+    db.refresh(db_book)
+    db.close()
+    return db_book
 
 
-def update_book(book_id: int, book: Book):
-    connection = get_db_connection()
-    cursor = connection.cursor()
+def update_book(book_id: int, book: BookAlcCreate):
+    db = SessionLocal()
+    db_book = db.query(BookAlc).filter(BookAlc.id == book_id).first()
+    if not db_book:
+        db.close()
+        raise HTTPException(status_code=404, detail="Book not found")
 
-    cursor.execute(
-        """
-        UPDATE books
-        SET title = %s, author = %s, quantity = %s
-        WHERE id = %s  
-        """,
-        (book.title, book.author, book.quantity, book_id)
-    )
+    db_book.title = book.title
+    db_book.author = book.author
+    db_book.quantity = book.quantity
 
-    connection.commit()
-    updated_rows = cursor.rowcount
-    cursor.close()
-    connection.close()
-
-    if updated_rows == 0:
-        raise HTTPException(status_code=404,
-                            detail=f"Error: book with id = {book_id} not found")
-
-    return {
-        "message": "Book successfully updated"
-    }
+    db.commit()
+    db.refresh(db_book)
+    db.close()
+    return db_book
 
 
 def delete_book(book_id: int):
-    connection = get_db_connection()
-    cursor = connection.cursor()
+    db = SessionLocal()
+    db_book = db.query(BookAlc).filter(BookAlc.id == book_id).first()
+    if not db_book:
+        db.close()
+        raise HTTPException(status_code=404, detail="Book not found")
 
-    cursor.execute(
-        """
-        DELETE FROM borrowed_books
-        WHERE book_id = %s
-        """,
-        (book_id,)
-    )
-
-    cursor.execute(
-        """
-        DELETE FROM books WHERE id = %s
-        """,
-        (book_id,)
-    )
-
-    connection.commit()
-    deleted_rows = cursor.rowcount
-    cursor.close()
-    connection.close()
-
-    if deleted_rows == 0:
-        raise HTTPException(status_code=404,
-                            detail=f"Error: book with id = {book_id} not found")
-
-    return {
-        "message": "Book successfully deleted"
-    }
+    db.delete(db_book)
+    db.commit()
+    db.close()
+    # return BookAlcResponse(
+    #     id=db_book.id,
+    #     title=db_book.title,
+    #     author=db_book.author,
+    #     quantity=db_book.quantity
+    # )
+    return {"message": "Book successfully deleted"}
 
 
 def borrow_book(request: BorrowedBookRequest):
-    connection = get_db_connection()
-    cursor = connection.cursor()
+    db = SessionLocal()
+    db_book = db.query(BookAlc).filter(BookAlc.id == request.book_id).first()
+    if not db_book:
+        db.close()
+        raise HTTPException(status_code=404, detail="No available copies of this book")
 
-    cursor.execute(
-        """
-        SELECT quantity FROM books
-        WHERE id = %s
-        """,
-        (request.book_id,)
-    )
-    result = cursor.fetchone()
-    if not result:
-        cursor.close()
-        connection.close()
-        raise HTTPException(status_code=404, detail="Book not found")
+    db_borrowed_book = db.query(BorrowedBookAlc).filter(BorrowedBookAlc.reader_id == request.reader_id,
+                                                        BorrowedBookAlc.returned_date == None).all()
 
-    quantity = result[0]
-    if quantity <= 0:
-        cursor.close()
-        connection.close()
-        raise HTTPException(status_code=400, detail="No available copies of this book")
+    if len(db_borrowed_book > 3):
+        db.close()
+        raise HTTPException(status_code=400, detail="Reader has already borrowed 3 books")
 
-    cursor.execute(
-        """
-        SELECT count(*) FROM borrowed_books
-        WHERE reader_id = %s AND returned_date IS NULL
-        """,
-        (request.reader_id,)
-    )
-    books_borrow = cursor.fetchone()[0]
-    if books_borrow > 3:
-        cursor.close()
-        connection.close()
-        raise HTTPException(status_code=400, detail="Three books has already borrowed")
+    new_borrow = BorrowedBookAlc(book_id=request.book_id,
+                                 reader_id=request.reader_id,
+                                 borrowed_date=datetime.now())
 
-    cursor.execute(
-        """
-        INSERT INTO borrowed_books (book_id, reader_id, borrowed_date)
-        VALUES (%s, %s, %s)
-        """,
-        (request.book_id, request.reader_id, datetime.now())
-    )
+    db.add(new_borrow)
+    db.commit()
+    db.refresh(new_borrow)
+    db.close()
 
-    cursor.execute(
-        """
-        UPDATE books SET quantity = quantity - 1
-        WHERE id = %s 
-        """,
-        (request.book_id,)
-    )
-
-    connection.commit()
-    cursor.close()
-    connection.close()
-
-    return {
-        "message": "Book successfully borrowed"
-    }
+    db_book.quantity -= 1
+    db.commit()
+    return {"message": "Book successfully borrowed"}
 
 
 def return_book(request: ReturnBookRequest):
-    connection = get_db_connection()
-    cursor = connection.cursor()
+    db = SessionLocal()
+    db_borrow = db.query(BorrowedBookAlc).filter(BorrowedBookAlc.book_id == request.book_id,
+                                                 BorrowedBookAlc.reader_id == request.reader_id,
+                                                 BorrowedBookAlc.returned_date == None).first()
 
-    cursor.execute(
-        """
-        SELECT
-            id,
-            book_id,
-            reader_id,
-            borrowed_books,
-            returned_date
-        FROM borrowed_books
-        WHERE book_id = %s AND reader_id = %s AND returned_date IS NULL
-        """,
-        (request.book_id, request.reader_id)
-    )
+    if not db_borrow:
+        db.close()
+        raise HTTPException(status_code=400, detail="This book wasn't borrow by this reader")
 
-    borrow = cursor.fetchone()
-    if not borrow:
-        cursor.close()
-        connection.close()
-        raise HTTPException(status_code=400,
-                            detail="Book isn't borrowed by this reader")
+    db_borrow.returned_date = datetime.now()
+    db.commit()
 
-    borrow_id = borrow[0]
-    cursor.execute(
-        """
-        UPDATE borrowed_books
-        SET returned_date = %s
-        WHERE id = %s
-        """,
-        (datetime.now(), borrow_id)
-    )
-
-    cursor.execute(
-        """
-        UPDATE books
-        SET quantity = quantity + 1
-        WHERE id = %s
-        """,
-        (request.book_id,)
-    )
-
-    connection.commit()
-    cursor.close()
-    connection.close()
-
-    return {
-        "message": "Book successfully returned"
-    }
-
-
-def get_borrowed_book_by_reader(reader_id: int):
-    connection = get_db_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        SELECT
-            b.id,
-            b.title,
-            b.author,
-            bb.reader_id,
-            bb.borrowed_date
-        FROM books AS b
-        JOIN borrowed_books AS bb
-        ON b.id = bb.book_id
-        WHERE bb.reader_id = %s AND bb.returned_date IS NULL
-        """,
-        (reader_id,)
-    )
-
-    book_rows = cursor.fetchall()
-    cursor.close()
-    connection.close()
-
-    return [{
-        "id": br[0],
-        "title": br[1],
-        "author": br[2],
-        "reader_id": br[3],
-        "borrowed_date": br[4]}
-        for br in book_rows
-    ]
+    db_book = db.query(BookAlc).filter(BookAlc.id == request.book_id).first()
+    db_book.quantity += 1
+    db.commit()
+    db.close()
+    return {"message": "Book successfully returned"}
 
 
 def get_all_borrowed_books():
-    connection = get_db_connection()
-    cursor = connection.cursor()
+    db = SessionLocal()
+    db_borrowed_books = db.query(BorrowedBookAlc).all()
+    db.close()
+    return db_borrowed_books
 
-    cursor.execute(
-        """
-        SELECT
-            b.id,
-            b.title,
-            b.author,
-            bb.id,
-            r.name
-        FROM books AS b
-        JOIN borrowed_books AS bb
-        ON b.id = bb.book_id
-        JOIN readers as r
-        ON r.id = bb.reader_id
-        WHERE bb.returned_date IS NULL
-        """
-    )
 
-    borrowed_books = cursor.fetchall()
-    cursor.close()
-    connection.close()
-
-    return [{
-        "id": bb[0],
-        "title": bb[1],
-        "author": bb[2],
-        "borrowed_id": bb[3],
-        "reader": bb[4]}
-        for bb in borrowed_books
-    ]
+def get_borrowed_book_by_reader(reader_id: int):
+    db = SessionLocal()
+    db_borrowed_books_by_reader = (db.query(BorrowedBookAlc)
+                                   .filter(BorrowedBookAlc.reader_id == reader_id).all())
+    if not db_borrowed_books_by_reader:
+        db.close()
+        raise HTTPException(status_code=404, detail="No borrowed books found for this reader")
+    return db_borrowed_books_by_reader

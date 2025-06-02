@@ -6,3 +6,5 @@ python-jose[cryptography]
 passlib[bcrypt]
 datetime
 pytest
+sqlalchemy
+alembic

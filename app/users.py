@@ -1,67 +1,40 @@
 from fastapi import HTTPException
 
-from app.auth import hash_password, verify_password
+from app.auth import hash_password, verify_password, create_access_token
 from app.data_base import get_db_connection
-from app.models import UserCreate, UserLogin, UserDelete
+from app.database_by_alchemy import SessionLocal
+from app.models import UserCreate, UserLogin, UserRemove, UserAlc
 
 
 def register(user: UserCreate):
-    connection = get_db_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        SELECT
-            id,
-            email,
-            hashed_password
-        FROM users
-        WHERE email = %s
-        """,
-        (user.email,)
-    )
-
-    if cursor.fetchone():
-        cursor.close()
-        connection.close()
+    db = SessionLocal()
+    db_user = db.query(UserAlc).filter(UserAlc.email == user.email).first()
+    if db_user:
+        db.close()
         raise HTTPException(status_code=400, detail="User already registered")
 
     hashed_password = hash_password(user.password)
-    cursor.execute(
-        """
-        INSERT INTO users (email, hashed_password) VALUES (%s, %s)
-        """,
-        (user.email, hashed_password)
-    )
+    db_user = UserAlc(email=user.email, hashed_password=hashed_password)
 
-    connection.commit()
-    cursor.close()
-    connection.close()
-
-    return {
-        "message": "User successfully registered"
-    }
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    db.close()
+    return {"message": "User successfully registered"}
 
 
-def get_user_by_email(email: UserLogin):
-    connection = get_db_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        SELECT
-            id,
-            email,
-            hashed_password
-        FROM users WHERE email = %s
-        """,
-        (email,)
-    )
-    db_user = cursor.fetchone()
-    cursor.close()
-    connection.close()
-
+def get_user_by_email(email: str):
+    db = SessionLocal()
+    db_user = db.query(UserAlc).filter(UserAlc.email == email).first()
+    db.close()
     return db_user
+
+
+def get_all_users():
+    db = SessionLocal()
+    db_users = db.query(UserAlc).all()
+    db.close()
+    return db_users
 
 
 def login(user: UserLogin):
@@ -69,76 +42,34 @@ def login(user: UserLogin):
     if not db_user:
         raise HTTPException(status_code=400, detail="Invalid email or password")
 
-    user_id, user_email, hashed_password = db_user
-    if not verify_password(user.password, hashed_password):
+    if not verify_password(user.password, db_user.hashed_password):
         raise HTTPException(status_code=400, detail="Invalid email or password")
 
-    return user_id, user_email
+    access_token = create_access_token(data={"sub": db_user.email})
+    return {
+        "access_token": access_token,
+        "token_type": "bearer"
+    }
 
 
-def get():
-    connection = get_db_connection()
-    cursor = connection.cursor()
+def remove(user: UserRemove):
+    db = SessionLocal()
+    db_user = db.query(UserAlc).filter(UserAlc.email == user.email).first()
 
-    cursor.execute(
-        """
-        SELECT
-            id,
-            email
-        FROM users
-        """
-    )
-
-    user_rows = cursor.fetchall()
-
-    return [{
-        "id": ur[0],
-        "email": ur[1]}
-        for ur in user_rows
-    ]
-
-
-def delete(user: UserDelete):
-    connection = get_db_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        SELECT
-            id,
-            hashed_password
-        FROM users
-        WHERE email = %s""",
-        (user.email,)
-    )
-    result = cursor.fetchone()
-    if not result:
-        cursor.close()
-        connection.close()
+    if not db_user:
+        db.close()
         raise HTTPException(status_code=404, detail="User not found")
 
-    user_id, hashed_password = result
-    if not verify_password(user.password, hashed_password):
-        cursor.close()
-        connection.close()
+    if not verify_password(user.password, db_user.hashed_password):
+        db.close()
         raise HTTPException(status_code=403, detail="Invalid password")
 
-    cursor.execute("SELECT COUNT(*) FROM users")
-    total_users = cursor.fetchone()[0]
+    total_users = db.query(UserAlc).count()
     if total_users <= 1:
-        cursor.close()
-        connection.close()
+        db.close()
         raise HTTPException(status_code=400, detail="At least one user must exist")
 
-    cursor.execute(
-        "DELETE FROM users WHERE id = %s",
-        (user_id,)
-    )
-
-    connection.commit()
-    cursor.close()
-    connection.close()
-
-    return {
-        "message": "User successfully deleted"
-    }
+    db.delete(db_user)
+    db.commit()
+    db.close()
+    return {"message": "User successfully deleted"}
