@@ -3,8 +3,8 @@ from datetime import datetime
 
 from app.data_base import get_db_connection
 from app.database_by_alchemy import SessionLocal
-from app.models import (Book, BorrowedBookRequest, ReturnBookRequest, BookAlc,
-                        BorrowedBookAlc, BookAlcCreate, BookAlcResponse)
+from app.models import (BorrowedBookRequest, ReturnBookRequest, BookAlc,
+                        BorrowedBookAlc, BookAlcCreate, Book)
 
 
 def get_book():
@@ -17,6 +17,12 @@ def get_book():
 def add_book(book: BookAlcCreate):
     db = SessionLocal()
     db_book = BookAlc(title=book.title, author=book.author, quantity=book.quantity)
+
+    existing_book = db.query(BookAlc).filter(BookAlc.title == book.title).first()
+    if existing_book:
+        db.close()
+        raise HTTPException(status_code=400, detail="Book with this title already exist")
+
     db.add(db_book)
     db.commit()
     db.refresh(db_book)
@@ -24,7 +30,7 @@ def add_book(book: BookAlcCreate):
     return db_book
 
 
-def update_book(book_id: int, book: BookAlcCreate):
+def update_book(book_id: int, book: Book):
     db = SessionLocal()
     db_book = db.query(BookAlc).filter(BookAlc.id == book_id).first()
     if not db_book:

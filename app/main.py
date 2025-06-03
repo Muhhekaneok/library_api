@@ -1,15 +1,14 @@
 from typing import List
 
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends
 
-from app.auth import create_access_token, get_current_user
+from app.auth import get_current_user
 from app.books import (get_book, add_book, update_book, delete_book, borrow_book,
-                       return_book, get_borrowed_book_by_reader, get_all_borrowed_books)
-from app.models import (UserCreate, UserLogin, UserRemove, Book, BorrowedBookRequest, ReturnBookRequest,
-                        UserAlc, BookAlc, ReaderAlc, BorrowedBookAlc, BookAlcCreate, BookAlcResponse)
-from app.readers import get_readers, get_reader
+                       get_borrowed_book_by_reader, get_all_borrowed_books)
+from app.models import (UserCreate, UserLogin, UserRemove, Book, BorrowedBookRequest,
+                        BookAlcCreate, BookAlcResponse, ReaderAlcCreate, ReaderAlcResponse)
+from app.readers import get_readers, get_reader, add_reader
 from app.users import register, login, remove, get_all_users
-from app.database_by_alchemy import SessionLocal
 
 app = FastAPI()
 
@@ -45,7 +44,7 @@ def add_book_sqlalchemy(book: BookAlcCreate, current_user: str = Depends(get_cur
 
 
 @app.put("/book/{book_id}", response_model=BookAlcResponse)
-def update_book_sqlalchemy(book_id: int, book: BookAlcCreate, current_user: str = Depends(get_current_user)):
+def update_book_sqlalchemy(book_id: int, book: Book, current_user: str = Depends(get_current_user)):
     return update_book(book_id, book)
 
 
@@ -55,14 +54,19 @@ def delete_book_sqlalchemy(book_id: int, current_user: str = Depends(get_current
     return delete_book(book_id)
 
 
-@app.get("/readers")
+@app.get("/readers", response_model=List[ReaderAlcResponse])
 def get_readers_sqlalchemy():
     return get_readers()
 
 
-@app.get("/readers/{reader_id}")
+@app.get("/readers/{reader_id}", response_model=ReaderAlcResponse)
 def get_reader_sqlalchemy(reader_id: int):
     return get_reader(reader_id)
+
+
+@app.post("/readers", response_model=ReaderAlcResponse)
+def add_reader_sqlalchemy(reader: ReaderAlcCreate):
+    return add_reader(reader)
 
 
 @app.post("/borrow")

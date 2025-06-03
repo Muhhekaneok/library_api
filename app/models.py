@@ -42,7 +42,7 @@ class BookAlcCreate(BaseModel):
     quantity: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class BookAlcResponse(BaseModel):
@@ -52,7 +52,24 @@ class BookAlcResponse(BaseModel):
     quantity: int
 
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+
+class ReaderAlcCreate(BaseModel):
+    name: str
+    email: EmailStr
+
+    class Config:
+        from_attributes = True
+
+
+class ReaderAlcResponse(BaseModel):
+    id: int
+    name: str
+    email: EmailStr
+
+    class Config:
+        from_attributes = True
 
 
 class UserAlc(Base):
