@@ -3,12 +3,12 @@ from typing import List
 from fastapi import FastAPI, Depends
 
 from app.auth import get_current_user
-from app.books import (get_book, add_book, update_book, delete_book, borrow_book,
-                       get_borrowed_book_by_reader, get_all_borrowed_books)
 from app.models import (UserCreate, UserLogin, UserRemove, Book, BorrowedBookRequest,
-                        BookAlcCreate, BookAlcResponse, ReaderAlcCreate, ReaderAlcResponse)
-from app.readers import get_readers, get_reader, add_reader
+                        BookAlcCreate, BookAlcResponse, ReaderAlcCreate, ReaderAlcResponse, ReturnBookRequest)
 from app.users import register, login, remove, get_all_users
+from app.books import (get_book, add_book, update_book, delete_book, borrow_book, return_book,
+                       get_borrowed_book_by_reader, get_all_borrowed_and_returned_books, get_only_borrowed_books)
+from app.readers import get_readers, get_reader, add_reader, delete_reader
 
 app = FastAPI()
 
@@ -29,7 +29,7 @@ def get_users_sqlalchemy():
 
 
 @app.delete("/delete_user")
-def delete_user(user: UserRemove):
+def delete_user(user: UserRemove, current_user: str = Depends(get_current_user)):
     return remove(user)
 
 
@@ -69,16 +69,31 @@ def add_reader_sqlalchemy(reader: ReaderAlcCreate):
     return add_reader(reader)
 
 
+@app.delete("/reader/{reader_id}", response_model=None)
+def delete_reader_sqlalchemy(reader_id: int):
+    return delete_reader(reader_id)
+
+
 @app.post("/borrow")
 def borrow_book_sqlalchemy(borrow_req: BorrowedBookRequest):
     return borrow_book(borrow_req)
 
 
-@app.get("/borrowed_books")
-def get_all_borrowed_books_sqlalchemy():
-    return get_all_borrowed_books()
+@app.post("/return")
+def return_book_sqlalchemy(return_req: ReturnBookRequest):
+    return return_book(return_req)
+
+
+@app.get("/borrowed_and_returned_books")
+def get_all_borrowed_and_returned_books_sqlalchemy():
+    return get_all_borrowed_and_returned_books()
 
 
 @app.get("/borrowed_books/{reader_id}")
 def get_borrowed_books_by_reader_sqlalchemy(reader_id: int):
     return get_borrowed_book_by_reader(reader_id)
+
+
+@app.get("/borrowed_books_only")
+def get_only_borrowed_books_sqlalchemy():
+    return get_only_borrowed_books()

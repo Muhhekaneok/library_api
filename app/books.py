@@ -114,7 +114,7 @@ def return_book(request: ReturnBookRequest):
     return {"message": "Book successfully returned"}
 
 
-def get_all_borrowed_books():
+def get_all_borrowed_and_returned_books():
     db = SessionLocal()
     db_borrowed_books = db.query(BorrowedBookAlc).all()
     db.close()
@@ -129,3 +129,15 @@ def get_borrowed_book_by_reader(reader_id: int):
         db.close()
         raise HTTPException(status_code=404, detail="No borrowed books found for this reader")
     return db_borrowed_books_by_reader
+
+
+def get_only_borrowed_books():
+    db = SessionLocal()
+    db_only_borrowed = db.query(BorrowedBookAlc).filter(BorrowedBookAlc.returned_date == None).all()
+
+    if not db_only_borrowed:
+        db.close()
+        raise HTTPException(status_code=404, detail="No borrowed books found")
+
+    db.close()
+    return db_only_borrowed
